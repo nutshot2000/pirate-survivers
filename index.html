@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🏴‍☠️</text></svg>" />
+    <title>Salt &amp; Powder — prototype</title>
+    <style>
+      html, body { margin: 0; background: #041a29; height: 100%; overflow: hidden; }
+      #game { width: 100%; height: 100%; }
+      canvas { display: block; margin: 0 auto; }
+
+      .overlay {
+        position: fixed; inset: 0; z-index: 10;
+        display: flex; align-items: center; justify-content: center;
+        background: rgba(2, 20, 32, 0.72);
+        font-family: Georgia, 'Times New Roman', serif; color: #f3e9d2;
+      }
+      .panel {
+        background: #12283a; border: 2px solid #c8a24a; border-radius: 10px;
+        padding: 24px 28px; min-width: 540px; max-width: 720px;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
+      }
+      .panel h2 { margin: 0 0 16px; color: #c8a24a; letter-spacing: 3px; text-align: center; }
+      .cards { display: flex; gap: 14px; }
+      .card {
+        flex: 1; background: #0b1c2b; border: 1px solid #3f5f7a; border-radius: 8px;
+        padding: 16px; cursor: pointer; transition: transform 0.12s, border-color 0.12s;
+      }
+      .card:hover { transform: translateY(-6px); border-color: #c8a24a; }
+      .card h3 { margin: 0 0 8px; font-size: 16px; color: #ffd97a; }
+      .card p { margin: 0; font-size: 13px; line-height: 1.45; color: #cfe0ee; }
+      .tag {
+        display: inline-block; font-size: 10px; letter-spacing: 1.5px;
+        padding: 2px 7px; border-radius: 4px; margin-bottom: 8px; font-weight: bold;
+      }
+      .tag-new { background: #c8a24a; color: #12283a; }
+      .tag-up { background: #2c4a63; color: #9fd6ff; }
+      .tag-crew { background: #3a3f4a; color: #cfe0ee; }
+      .tag-evo { background: linear-gradient(135deg, #7a3ad9, #c8a24a); color: #fff; }
+      .card-evo { border-color: #b98aff; background: #16102a; box-shadow: 0 0 18px rgba(185, 138, 255, 0.28); }
+      .card-evo:hover { border-color: #e0bc5f; }
+      .shop-row {
+        display: flex; justify-content: space-between; align-items: center;
+        padding: 9px 4px; border-bottom: 1px solid #24405a; gap: 24px;
+      }
+      .btn {
+        background: #c8a24a; color: #12283a; border: none; border-radius: 6px;
+        padding: 8px 14px; font-weight: bold; cursor: pointer; font-family: inherit; font-size: 14px;
+      }
+      .btn:hover:not(:disabled) { background: #e0bc5f; }
+      .btn:disabled { opacity: 0.35; cursor: default; }
+      .btn.big { width: 100%; margin-top: 16px; padding: 12px; font-size: 16px; letter-spacing: 2px; }
+      .coins { color: #ffd97a; font-weight: bold; }
+      .hint { text-align: center; font-size: 12px; color: #9db8cc; margin-top: 14px; font-style: italic; }
+
+      /* captain's ledger (TAB) — read-only panel, clicks pass through */
+      .stats-panel {
+        position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        z-index: 9; pointer-events: none;
+        background: rgba(9, 24, 36, 0.94); border: 2px solid #c8a24a; border-radius: 10px;
+        padding: 20px 26px; min-width: 380px;
+        font-family: Georgia, 'Times New Roman', serif; color: #f3e9d2;
+        box-shadow: 0 10px 40px rgba(0, 0, 0, 0.55);
+      }
+      .stats-panel h3 { margin: 0 0 10px; color: #c8a24a; letter-spacing: 3px; text-align: center; font-size: 18px; }
+      .stats-panel .ledger-sec {
+        margin-top: 12px; border-top: 1px solid #24405a; padding-top: 6px;
+        font-size: 11px; letter-spacing: 2px; color: #c8a24a;
+      }
+      .stats-panel .ledger-row {
+        display: flex; justify-content: space-between; gap: 32px;
+        font-size: 13px; padding: 2px 0; color: #cfe0ee;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="game"></div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
