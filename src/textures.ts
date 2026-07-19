@@ -33,6 +33,7 @@ export function generateTextures(scene: Phaser.Scene): void {
   makeCoffin(scene);
   makeWhale(scene);
   makeCache(scene);
+  makeZones(scene);
 }
 
 function makeWater(scene: Phaser.Scene, key: string, base: string, light: string): void {
@@ -65,6 +66,25 @@ function makeWater(scene: Phaser.Scene, key: string, base: string, light: string
     for (let x = 0; x <= size; x += 4) {
       const y = y0 + Math.sin((x / wavelength) * Math.PI * 2) * amp;
       if (x === 0) ctx.moveTo(x, y);
+      else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+
+  // sun catching the crests — short bright strokes along the waves
+  ctx.globalAlpha = 0.1;
+  ctx.strokeStyle = '#d8ecf6';
+  for (let i = 0; i < 9; i++) {
+    const y0 = Math.random() * size;
+    const amp = 2 + Math.random() * 3;
+    const wavelength = 50 + Math.random() * 50;
+    const x0 = Math.random() * size;
+    const len = 20 + Math.random() * 45;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let x = x0; x <= x0 + len; x += 4) {
+      const y = y0 + Math.sin((x / wavelength) * Math.PI * 2) * amp;
+      if (x === x0) ctx.moveTo(x, y);
       else ctx.lineTo(x, y);
     }
     ctx.stroke();
@@ -564,6 +584,45 @@ function makeCache(scene: Phaser.Scene): void {
   g.lineBetween(0, -7, 0, 11);
   g.generateTexture('cache', 32, 24);
   g.destroy();
+}
+
+// Zone grading painted on WHITE and MULTIPLY-blended over the water, so the
+// water's texture detail survives (white = unchanged; colors grade the tint):
+// golden shallows around the port, a cool storm belt, the darker deep beyond
+function makeZones(scene: Phaser.Scene): void {
+  const size = 1024;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  const k = size / 6000; // world → canvas
+  const px = 3000 * k;
+  const py = 1400 * k;
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, size, size);
+
+  let grad = ctx.createRadialGradient(px, py, 0, px, py, 1400 * k);
+  grad.addColorStop(0, 'rgba(255, 240, 198, 0.9)');
+  grad.addColorStop(0.7, 'rgba(255, 246, 222, 0.4)');
+  grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+
+  grad = ctx.createRadialGradient(px, py, 2800 * k, px, py, 4200 * k);
+  grad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+  grad.addColorStop(0.4, 'rgba(180, 190, 208, 0.5)');
+  grad.addColorStop(1, 'rgba(160, 170, 194, 0.62)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+
+  grad = ctx.createRadialGradient(px, py, 4200 * k, px, py, 5500 * k);
+  grad.addColorStop(0, 'rgba(255, 255, 255, 0)');
+  grad.addColorStop(1, 'rgba(92, 104, 142, 0.7)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+
+  scene.textures.addCanvas('zones', canvas);
 }
 
 function makeDebris(scene: Phaser.Scene): void {

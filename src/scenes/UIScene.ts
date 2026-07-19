@@ -1,7 +1,8 @@
 import Phaser from 'phaser';
-import { WORLD, PORT, BOSS } from '../config';
+import { WORLD, PORT, BOSS, BIOMES } from '../config';
 import { WEAPONS } from '../systems/weapons';
 import { getEvolution } from '../systems/cards';
+import { getFogBanks } from '../systems/biomes';
 import { skyState } from '../systems/sky';
 import { EnemyShip } from '../objects/EnemyShip';
 import { GameScene } from './GameScene';
@@ -89,10 +90,11 @@ export class UIScene extends Phaser.Scene {
   }
 
   update(time: number): void {
-    // the sun sails its own course — same shared sky state the lantern uses
-    const sky = skyState(time);
+    // the sun sails its own course — read the GAME scene's clock, not ours:
+    // the game clock resets on restart and we'd drift out of sync with the lantern
+    const sky = skyState(this.gs && this.gs.time ? this.gs.time.now : time);
     this.dayOverlay.setFillStyle(sky.color, sky.alpha);
-    this.nightOverlay.setFillStyle(0x0a1030, sky.night * 0.5);
+    this.nightOverlay.setFillStyle(0x0a1030, sky.night * 0.34);
 
     const gs = this.gs;
     if (!gs || !gs.player || !gs.player.active) return;
@@ -147,6 +149,19 @@ export class UIScene extends Phaser.Scene {
     g.fillRect(ox, oy, S, S);
     g.lineStyle(2, 0xc8a24a, 0.8);
     g.strokeRect(ox, oy, S, S);
+
+    // the rings of risk around Port Royal
+    g.lineStyle(1, 0xffd97a, 0.45);
+    g.strokeCircle(ox + PORT.x * k, oy + PORT.y * k, BIOMES.shallowsR * k);
+    g.lineStyle(1, 0x6a8aa8, 0.35);
+    g.strokeCircle(ox + PORT.x * k, oy + PORT.y * k, BIOMES.stormInnerR * k);
+    g.strokeCircle(ox + PORT.x * k, oy + PORT.y * k, BIOMES.stormOuterR * k);
+
+    // pools of mist on the chart
+    for (const b of getFogBanks()) {
+      g.fillStyle(0xcfd8e0, 0.3);
+      g.fillCircle(ox + b.x * k, oy + b.y * k, Math.max(2, b.r * k));
+    }
 
     for (const w of gs.whirlpools) {
       g.fillStyle(0x9a6adf, 0.9);

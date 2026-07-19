@@ -19,7 +19,7 @@
 
 ---
 
-## Current state — what's implemented (v0.1, playable)
+## Current state — what's implemented (v0.3, playable)
 
 ### Sailing & world
 - Momentum sailing (W/S sails, A/D rudder), drag, turn rate, foam wake, camera follow with lag
@@ -45,13 +45,15 @@
 | **Armored Brig** (iron prow, ★2+) | Slow, orbits, 2-ball volleys, rams hard | Head-on shot does 30% — flank, burn, mortar, or ram her. +1 notoriety |
 | **Elite Frigate** (navy+gold, ★3+, max 1) | Kites at long range; **gold flash telegraphs a 6-ball fan with a gap** | Never surrenders, worth 2 XP, always drops a relic. +2 notoriety |
 
-- AI states: wander → aggro (within 700px) → deaggro (beyond 1050px); island collision veering
+- AI states: wander → aggro (within 700px — **halved inside fog banks**, and **never in the shallows** unless provoked) → deaggro (beyond 1050px); island collision veering
+- Firing on a ship **provokes** it — even in safe waters, even at extreme range
 - Ram damage is generalized: any hull with `ramDamage > 0` hurts on collision; sloops still dash themselves to splinters
+- Surrendered hulks don't count against the world spawn cap
 
 ### Surrender & boarding
 - Ships below 35% HP can **strike their colors** ⚑ (merchants 40%, gunboats 25%, sloops 20%)
 - Surrendered ships stop fighting; your broadsides hold fire on them
-- Sail within 130px to **board**: 1.6× coins + guaranteed rum/powder (+relic chance on merchants), +1 notoriety, then the emptied hulk slips under
+- Sail within 130px to **board**: 1.4× coins + guaranteed rum/powder (+relic chance on merchants), +1 notoriety, then the emptied hulk slips under
 - Or sink them anyway for scraps. The pirate's choice.
 
 ### Looting (four ways to get rich)
@@ -64,18 +66,26 @@
 Every event spawns nearby, announces itself, and drifts away if ignored — all on the minimap.
 | Event | The choice |
 |---|---|
-| **Distress call** ⚑ | Genuine sailors share cargo… or it's a **navy decoy** (45% + 5%/★, cap 75%) — 2 gunboats spring the trap |
+| **Distress call** ⚑ | Genuine sailors share cargo… or it's a **navy decoy** (45% + 5%/★, cap 75%). The trap scales with infamy: gunboats, **+a fire ship at ★2, a brig at ★4** |
 | **Floating coffin** | Pry it open: burial coins, rum, bare bones… or **THE DEAD RESENT YOU** (curse damage) |
 | **Smuggler's cache** | Fat lashed cargo — 50% chance **hidden guards** (2 sloops) spring as you close in |
 | **Following whale** | Shadows your wake ~70s, spouts; may **flush a sunken treasure glint** up for you (40%/spout) |
 
+### Biomes — the rings of risk
+- **Golden shallows** (within 1400px of Port Royal): warm sunlit water; genuinely safe — nothing turns hostile here unless you fire first, and drifting traffic bumps hulls without bloodshed
+- **Open sea**: the standard hunt
+- **Storm belt** (2800–4200px): steel-gray water — a **swell shoves every hull** every ~3.6s, lightning flashes with thunder rolling behind, rain spray
+- **The deep** (beyond 4200px): dark steel-blue; the spawn mix turns ugly (hunters, brigs, fire ships) and all coin pays **×1.5**
+- **Fog banks** (3, scattered open water): layered drifting mist; predators inside spot you at barely **half range** — and 2 hulls lurk in each
+- The minimap charts the rings and the banks; the zone tint is multiply-graded so the water's sparkle survives
+
 ### Loot types
 | Drop | Effect |
 |---|---|
-| Coin crate | Gold |
-| Rum barrel | +8 HP |
+| Coin crate | Gold (mundane cargo washes away after 30s) |
+| Rum barrel | +12% max HP (min 8) |
 | Powder keg | +25% fire rate for 12s (⚡ HUD timer) |
-| Relic chest | Instant card draft |
+| Relic chest | Instant card draft — **never washes away** |
 
 ### The Salvage Winch (port upgrade, 3 levels: 80/140/220g)
 Auto-harpoon that spears sunken treasure and far loot, reels it home with a visible harpoon line.
@@ -118,13 +128,15 @@ Auto-harpoon that spears sunken treasure and far loot, reels it home with a visi
 - Sinking ships leave drifting **wood debris**
 - Floating text feedback everywhere (damage, loot, events)
 - **UI layer**: HUD/minimap/boss bar/sky washes live in a separate unzoomed UI scene — **H** hides the HUD, **TAB** opens the captain's ledger (purse, armament, refits)
+- **ESC drops anchor** (pause menu); switching away from the tab drops it for you — no more unfair deaths
 
 ### The Legendary Bounty (boss + win condition)
 - At **★5 notoriety**, the navy sends the **HMS INEXORABLE** — horn blast, screen shake, gold minimap dot
 - 600 HP Man O' War with a screen-top boss health bar; charges you firing 7-ball broadside fans
 - Launches 2 sloop escorts every 12s (cap 5); **enrages at 50% HP** (faster double volleys, red tint)
 - Never surrenders, immune to whirlpools, ramming it hurts *you* (20 dmg)
-- Kill payout: 80–120g + **2 guaranteed relics** + rum + powder, then the **LEGENDARY BOUNTY CLAIMED** victory screen → endless mode or new voyage
+- Kill payout: 60–90g + **2 guaranteed relics** + rum + powder, then the **LEGENDARY BOUNTY CLAIMED** victory screen → endless mode or new voyage
+- In endless mode the navy never forgives: **another Man O' War answers every +5 notoriety**
 
 ### Already procedural
 - Islands, whirlpools, sunken glints, flotsam, and ship spawns all reroll on every run/restart — no two voyages share a sea (port location is fixed by design, for now)
@@ -138,11 +150,11 @@ Auto-harpoon that spears sunken treasure and far loot, reels it home with a visi
 - ~~**Procedural map reroll**~~ **DONE** (world rerolls every run; seeded runs for dailies still TODO)
 - ~~**New weapons**: fire barrels, mortar, harpoon, ram prow, swivel guns — 6 weapons × 5 levels~~ **DONE**
 - ~~**Evolutions**: max a weapon + hold the matching crew card → evolved form~~ **DONE** (6 pairs, e.g. Broadsides + Deadeye Gunners = triple-volley *Devastator Barrage*)
-- **Biomes/zones**: golden shallows (safe), storm belt (lightning, waves push you), fog banks (ambushes), the deep (monsters)
-- **Day/night cycle** over a run; night = scarier, better loot
+- ~~**Biomes/zones**: golden shallows (safe), storm belt (lightning, waves push you), fog banks (ambushes), the deep (monsters)~~ **DONE** (sea-serpent monster for the deep still TODO)
+- ~~**Day/night cycle** over a run; night = scarier, better loot~~ **DONE** (4-min cycle, lantern glow; night-loot hook still TODO)
 - ~~**Sea events table**: distress calls (maybe traps), floating coffins, a following whale, smuggler caches~~ **DONE**
 - ~~**New enemies**: fire ships (sail at you and explode), elite frigates with dodgeable volley patterns, armored brigs~~ **DONE**
-- **Music**: procedural shanty layers that build as your build grows
+- ~~**Music**: procedural shanty layers that build as your build grows~~ **DONE** (adaptive WebAudio shanty)
 
 ### Tier 2 — roguelite structure (the "proper game")
 - **Multiple ports**: navy / merchant / pirate haven / smuggler cove — different stock and prices; some refuse you at high notoriety

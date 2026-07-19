@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { WORLD, PLAYER, ENEMY, PORT, ENCOUNTER, ISLANDS, WINCH, FLOTSAM, BOSS, EVOLUTION, FIRESHIP, BRIG, FRIGATE, EVENTS, killsToNextLevel } from '../config';
+import { WORLD, PLAYER, ENEMY, PORT, ENCOUNTER, ISLANDS, WINCH, FLOTSAM, BOSS, EVOLUTION, FIRESHIP, BRIG, FRIGATE, EVENTS, BIOMES, killsToNextLevel } from '../config';
+import { biomeAt, setFogBanks, FogBank } from '../systems/biomes';
 import { generateTextures } from '../textures';
 import { PlayerShip } from '../objects/PlayerShip';
 import { EnemyShip, EnemyKind } from '../objects/EnemyShip';
@@ -80,7 +81,9 @@ export class GameScene extends Phaser.Scene {
   private loot!: Phaser.Physics.Arcade.Group;
   private flags = new Map<EnemyShip, Phaser.GameObjects.Text>();
   private winchReadyAt = 0;
-  private bossSpawned = false;
+  private nextBossAt = 0; // notoriety that wakes the next Man O' War (endless mode keeps them coming)
+  private swellAt = 0;
+  private lightningAt = 0;
   private weaponCd: Partial<Record<WeaponId, number>> = {};
   private barrels: BarrelZone[] = [];
   private wakeDropAt = 0; // Inferno Wake drip timer
@@ -88,6 +91,7 @@ export class GameScene extends Phaser.Scene {
   private ember!: Phaser.GameObjects.Particles.ParticleEmitter;
   private enemyBars!: Phaser.GameObjects.Graphics;
   private lantern!: Phaser.GameObjects.Image;
+  private fogPuffs: { img: Phaser.GameObjects.Image; cx: number; cy: number; r: number; a: number; speed: number }[] = [];
   private clouds: { img: Phaser.GameObjects.Image; shadow: Phaser.GameObjects.Image; speed: number }[] = [];
   private waterA!: Phaser.GameObjects.TileSprite;
   private waterB!: Phaser.GameObjects.TileSprite;
@@ -121,24 +125,31 @@ export class GameScene extends Phaser.Scene {
     this.winchReadyAt = 0;
     this.flags = new Map();
     this.boss = null;
-    this.bossSpawned = false;
+    this.swellAt = 0;
+    this.lightningAt = 0;
     this.weaponCd = {};
     this.barrels = [];
     this.wakeDropAt = 0;
     this.contextHint = '';
+    this.fogPuffs = []; // images were destroyed with the last run — drop the dead refs
+    this.nextBossAt = BOSS.notorietyRequired;
 
     this.physics.world.setBounds(0, 0, WORLD.width, WORLD.height);
     this.cameras.main.setBounds(0, 0, WORLD.width, WORLD.height);
 
     // two parallax water layers, pinned to the screen and offset by the camera
     this.waterA = this.add.tileSprite(0, 0, 1280, 720, 'water').setOrigin(0).setScrollFactor(0).setDepth(-10);
-    this.waterB = this.add.tileSprite(0, 0, 1280, 720, 'water2').setOrigin(0).setScrollFactor(0).setDepth(-9).setAlpha(0.35);
+    this.waterB = this.add.tileSprite(0, 0, 1280, 720, 'water2').setOrigin(0).setScrollFactor(0).setDepth(-9).setAlpha(0.42);
 
     // islands (landmarks + manual collision + treasure)
     this.placeIslands();
     this.placeWhirlpools();
     this.placeGlints();
     this.placeClouds();
+
+    // the rings of risk: golden shallows → storm belt → the deep
+    this.add.image(0, 0, 'zones').setOrigin(0).setDepth(-5).setDisplaySize(WORLD.width, WORLD.height)
+      .setBlendMode(Phaser.BlendModes.MULTIPLY); // grade, don't wash: keeps the water detail
 
     // the port
     this.add.image(PORT.x, PORT.y, 'port').setDepth(1);
@@ -162,13 +173,16 @@ export class GameScene extends Phaser.Scene {
     this.loot = this.physics.add.group();
     this.harpoons = this.physics.add.group();
 
+    // fog banks + the hulls lurking in them (needs the enemies group)
+    this.placeFogBanks();
+
     // wake trailing the ship
     this.add.particles(0, 0, 'foam', {
       follow: this.player,
       lifespan: 1100,
       speed: { min: 2, max: 16 },
-      scale: { start: 1.6, end: 0 },
-      alpha: { start: 0.3, end: 0 },
+      scale: { start: 1.15, end: 0 },
+      alpha: { start: 0.18, end: 0 },
       frequency: 45,
       blendMode: 'ADD',
     }).setDepth(5);
@@ -212,11 +226,17 @@ export class GameScene extends Phaser.Scene {
 
     // a lantern for the dark — the sky washes themselves live in the UI scene
     this.lantern = this.add.image(this.player.x, this.player.y, 'light')
-      .setDepth(21).setScale(3.2).setAlpha(0).setBlendMode(Phaser.BlendModes.ADD);
+      .setDepth(21).setScale(4.5).setAlpha(0).setBlendMode(Phaser.BlendModes.ADD);
 
     // audio unlocks on first input (browser rule)
     this.input.keyboard!.on('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init());
+
+    // ESC drops anchor; switching away from the tab drops it for you
+    this.input.keyboard!.on('keydown-ESC', () => this.pauseGame());
+    const onBlur = (): void => this.pauseGame();
+    this.game.events.on('blur', onBlur);
+    this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => this.game.events.off('blur', onBlur));
 
     this.input.keyboard!.on('keydown-E', () => {
       if (this.overlayOpen) return;
@@ -247,6 +267,7 @@ export class GameScene extends Phaser.Scene {
     this.player.update(dt);
     this.collideIslands();
     this.applyWhirlpools(dt);
+    this.applyStorm(time);
 
     // scroll the water with the camera (second layer parallaxes + drifts)
     const cam = this.cameras.main;
@@ -257,7 +278,7 @@ export class GameScene extends Phaser.Scene {
 
     // the sun sails its own course — the UI scene reads the same sky state
     const sky = skyState(time);
-    this.lantern.setAlpha(sky.night * 0.6);
+    this.lantern.setAlpha(sky.night * 0.4);
     this.lantern.setPosition(this.player.x, this.player.y);
 
     // clouds wander overhead, dragging their shadows on the water
@@ -266,6 +287,12 @@ export class GameScene extends Phaser.Scene {
       c.shadow.x = c.img.x + 50;
       c.shadow.y = c.img.y + 60;
       if (c.img.x > WORLD.width + 320) c.img.x = -320;
+    }
+
+    // the mist breathes — puffs slowly orbit their fog bank
+    for (const p of this.fogPuffs) {
+      p.a += p.speed * dt;
+      p.img.setPosition(p.cx + Math.cos(p.a) * p.r, p.cy + Math.sin(p.a) * p.r);
     }
 
     sfx.setMood(this.player.level, this.player.notoriety);
@@ -532,6 +559,58 @@ export class GameScene extends Phaser.Scene {
       const shadow = this.add.image(x + 50, y + 60, 'cloud')
         .setDepth(-8).setScale(scale * 1.1).setAlpha(0.09).setTint(0x04203a);
       this.clouds.push({ img, shadow, speed: Phaser.Math.Between(8, 18) });
+    }
+  }
+
+  // fog banks: pools of mist in open water, with hulls lurking inside
+  private placeFogBanks(): void {
+    const banks: FogBank[] = [];
+    let attempts = 0;
+    while (banks.length < BIOMES.fog.count && attempts < 200) {
+      attempts++;
+      const x = Phaser.Math.Between(600, WORLD.width - 600);
+      const y = Phaser.Math.Between(600, WORLD.height - 600);
+      const r = Phaser.Math.Between(BIOMES.fog.radius[0], BIOMES.fog.radius[1]);
+      if (Phaser.Math.Distance.Between(x, y, PORT.x, PORT.y) < BIOMES.shallowsR + 500) continue;
+      if (!this.islands.every((isl) => Phaser.Math.Distance.Between(x, y, isl.x, isl.y) > r * 0.6 + isl.r)) continue;
+      if (!banks.every((b) => Phaser.Math.Distance.Between(x, y, b.x, b.y) > r + b.r + 400)) continue;
+      banks.push({ x, y, r });
+    }
+    setFogBanks(banks);
+    for (const b of banks) {
+      // ground mist: soft puffs UNDER the ships, so hulls stay readable
+      for (let i = 0; i < 8; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = Math.random() * b.r * 0.55;
+        const img = this.add.image(b.x + Math.cos(a) * r, b.y + Math.sin(a) * r, 'cloud')
+          .setDepth(2)
+          .setTint(0xc8d4de)
+          .setAlpha(0.1 + Math.random() * 0.06)
+          .setScale((b.r * Phaser.Math.FloatBetween(0.7, 1.4)) / 110)
+          .setRotation(Math.random() * Math.PI * 2);
+        this.fogPuffs.push({ img, cx: b.x, cy: b.y, r, a, speed: Phaser.Math.FloatBetween(0.02, 0.06) });
+      }
+      // two thin veils above the waves so you feel inside the mist, not under it
+      for (let i = 0; i < 2; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const r = Math.random() * b.r * 0.3;
+        const img = this.add.image(b.x + Math.cos(a) * r, b.y + Math.sin(a) * r, 'cloud')
+          .setDepth(25)
+          .setTint(0xd4dee8)
+          .setAlpha(0.07 + Math.random() * 0.04)
+          .setScale((b.r * Phaser.Math.FloatBetween(1.2, 1.8)) / 110)
+          .setRotation(Math.random() * Math.PI * 2);
+        this.fogPuffs.push({ img, cx: b.x, cy: b.y, r, a, speed: Phaser.Math.FloatBetween(0.015, 0.04) });
+      }
+      for (let i = 0; i < BIOMES.fog.lurkers; i++) {
+        const kind: EnemyKind = Math.random() < 0.5 ? 'sloop' : 'gunboat';
+        this.enemies.add(new EnemyShip(
+          this,
+          b.x + Phaser.Math.Between(-b.r * 0.5, b.r * 0.5),
+          b.y + Phaser.Math.Between(-b.r * 0.5, b.r * 0.5),
+          kind
+        ));
+      }
     }
   }
 
@@ -847,9 +926,15 @@ export class GameScene extends Phaser.Scene {
       sfx.bossHorn();
       const decoy = new EnemyShip(this, ev.x, ev.y, 'gunboat', true);
       this.enemies.add(decoy);
-      const wingman = new EnemyShip(this, ev.x + 70, ev.y + 50, 'gunboat');
+      // the trap scales with your infamy — the navy learns what it takes
+      const wingman = new EnemyShip(this, ev.x + 70, ev.y + 50, n >= 4 ? 'brig' : 'gunboat');
       wingman.aggroed = true;
       this.enemies.add(wingman);
+      if (n >= 2) {
+        const powder = new EnemyShip(this, ev.x - 70, ev.y + 50, 'fireship');
+        powder.aggroed = true;
+        this.enemies.add(powder);
+      }
     } else {
       // grateful sailors share what little they have
       const total = Phaser.Math.Between(EVENTS.distress.loot[0], EVENTS.distress.loot[1]);
@@ -911,6 +996,43 @@ export class GameScene extends Phaser.Scene {
     return best;
   }
 
+  // ---------- the storm belt ----------
+
+  private applyStorm(time: number): void {
+    if (biomeAt(this.player.x, this.player.y) !== 'storm') return;
+
+    // a swell shoves every hull in the belt
+    if (time > this.swellAt) {
+      this.swellAt = time + BIOMES.storm.swellEveryMs;
+      const a = Math.random() * Math.PI * 2;
+      const push = (ship: PlayerShip | EnemyShip): void => {
+        if (biomeAt(ship.x, ship.y) !== 'storm') return;
+        const body = ship.body as Phaser.Physics.Arcade.Body;
+        body.velocity.x += Math.cos(a) * BIOMES.storm.swellForce;
+        body.velocity.y += Math.sin(a) * BIOMES.storm.swellForce;
+      };
+      push(this.player);
+      for (const e of this.enemies.getChildren() as EnemyShip[]) {
+        if (e.active && !e.sinking) push(e);
+      }
+      this.cameras.main.shake(150, 0.002);
+    }
+
+    // lightning — flash first, thunder rolls in behind
+    if (time > this.lightningAt) {
+      this.lightningAt = time + Phaser.Math.Between(BIOMES.storm.lightningMinMs, BIOMES.storm.lightningMaxMs);
+      this.cameras.main.flash(140, 235, 245, 255);
+      this.time.delayedCall(Phaser.Math.Between(500, 1100), () => sfx.explosion());
+    }
+
+    // rain-lashed spray
+    this.splash.emitParticleAt(
+      this.player.x + Phaser.Math.Between(-420, 420),
+      this.player.y + Phaser.Math.Between(-320, 320),
+      1
+    );
+  }
+
   // ---------- whirlpools ----------
 
   private placeWhirlpools(): void {
@@ -969,7 +1091,8 @@ export class GameScene extends Phaser.Scene {
     l.setDepth(8);
     l.setData('kind', kind);
     l.setData('coins', coins);
-    this.time.delayedCall(30000, () => { if (l.active) l.destroy(); });
+    // the sea reclaims mundane cargo in 30s — but a relic waits for its captain
+    if (kind !== 'relic') this.time.delayedCall(30000, () => { if (l.active) l.destroy(); });
   }
 
   private collectLoot(l: Phaser.Physics.Arcade.Image): void {
@@ -978,11 +1101,14 @@ export class GameScene extends Phaser.Scene {
     const coins = l.getData('coins') as number; // read BEFORE destroy wipes the data
     l.destroy();
     switch (kind) {
-      case 'rum':
-        this.player.hp = Math.min(this.player.maxHp, this.player.hp + 8);
-        this.floatText(this.player.x, this.player.y - 24, '+8 HP', '#7be07b');
+      case 'rum': {
+        // rum patches what ails you — scales with the size of your hull
+        const heal = Math.max(8, Math.round(this.player.maxHp * 0.12));
+        this.player.hp = Math.min(this.player.maxHp, this.player.hp + heal);
+        this.floatText(this.player.x, this.player.y - 24, `+${heal} HP`, '#7be07b');
         sfx.rum();
         break;
+      }
       case 'powder':
         this.player.powderUntil = this.time.now + 12000;
         this.floatText(this.player.x, this.player.y - 24, 'POWDER! faster guns', '#ffb04a');
@@ -994,8 +1120,11 @@ export class GameScene extends Phaser.Scene {
         sfx.levelup();
         break;
       default: {
-        this.player.coins += coins;
-        this.floatText(this.player.x, this.player.y - 24, `+${coins}g`, '#ffd97a');
+        // the deep pays half again — if you dare collect it
+        const bonus = biomeAt(this.player.x, this.player.y) === 'deep' ? BIOMES.deepLootMul : 1;
+        const c = Math.round(coins * bonus);
+        this.player.coins += c;
+        this.floatText(this.player.x, this.player.y - 24, `+${c}g`, '#ffd97a');
         sfx.coin();
       }
     }
@@ -1306,7 +1435,7 @@ export class GameScene extends Phaser.Scene {
     }
     const pierce = (h.getData('pierce') as number) - 1;
     h.setData('pierce', pierce);
-    if (pierce < 0) h.destroy();
+    if (pierce <= 0) h.destroy(); // pierce N = N hulls total, not N+1
   }
 
   private fireSwivel(lvl: number, target: EnemyShip): void {
@@ -1388,6 +1517,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     enemy.hp -= dmg;
+    // a shot across the bow gets their attention — hostiles fight back when attacked
+    if (enemy.kind !== 'merchant') enemy.aggroed = true;
     if (this.player.mods.chainShot) enemy.slowUntil = this.time.now + 3000;
     this.splash.emitParticleAt(enemy.x, enemy.y, 5);
     this.floatText(enemy.x, enemy.y - 14, `${Math.round(dmg)}`, '#ffffff', 13);
@@ -1399,6 +1530,7 @@ export class GameScene extends Phaser.Scene {
       // restore special paint jobs the flash wiped
       if (enemy.surrendered) enemy.setTint(0xbbbbbb);
       else if (enemy.kind === 'manowar' && (enemy as BossShip).enraged) enemy.setTint(0xff7766);
+      else if (enemy.kind === 'frigate' && enemy.volleyAt > 0) enemy.setTintFill(0xffd97a); // telegraph still burning
       else if (enemy.hunter) enemy.setTint(0xff9999);
     });
 
@@ -1510,6 +1642,8 @@ export class GameScene extends Phaser.Scene {
 
     const ramDmg = ENEMY[enemy.kind].ramDamage;
     if (ramDmg <= 0) return;
+    // drifting traffic in the shallows bumps hulls, it doesn't board you
+    if (!enemy.aggroed && !enemy.hunter && biomeAt(this.player.x, this.player.y) === 'shallows') return;
     if (this.time.now < enemy.ramReadyAt) return;
     enemy.ramReadyAt = this.time.now + 900;
     const reduction = prowLvl > 0 ? (leviathan ? 0 : 0.5) : 1; // iron bow shrugs off half; the Leviathan notices nothing
@@ -1607,6 +1741,8 @@ export class GameScene extends Phaser.Scene {
     if (e.kind === 'frigate') this.player.notoriety += 2; // sinking an elite raises eyebrows
     if (e.kind === 'manowar') {
       this.player.notoriety += 5;
+      this.boss = null;
+      this.nextBossAt = this.player.notoriety + 5; // the navy never forgives — another will come
       this.time.delayedCall(1600, () => this.victory());
     }
     this.checkBossSpawn();
@@ -1622,13 +1758,14 @@ export class GameScene extends Phaser.Scene {
   // ---------- the legendary bounty ----------
 
   private checkBossSpawn(): void {
-    if (!this.bossSpawned && this.player.notoriety >= BOSS.notorietyRequired) {
+    // a Man O' War answers every five stars of infamy — even in endless mode
+    if (this.player.notoriety >= this.nextBossAt) {
       this.spawnBoss();
     }
   }
 
   private spawnBoss(): void {
-    this.bossSpawned = true;
+    this.nextBossAt = Number.MAX_SAFE_INTEGER; // until this one rests on the ocean floor
     const a = Math.random() * Math.PI * 2;
     const d = 1400;
     const x = Phaser.Math.Clamp(this.player.x + Math.cos(a) * d, 100, WORLD.width - 100);
@@ -1767,7 +1904,21 @@ export class GameScene extends Phaser.Scene {
 
     let kind: EnemyKind;
     let hunter = false;
-    if (Math.random() < 0.3) {
+    const biome = biomeAt(x, y);
+    if (biome === 'shallows') {
+      kind = Math.random() < 0.35 ? 'merchant' : 'sloop'; // safe waters
+    } else if (biome === 'deep') {
+      // the deep sends its worst — and no easy prey
+      const r = Math.random();
+      if (r < 0.45) {
+        kind = 'gunboat';
+        hunter = true; // the deep knows your name
+      } else if (r < 0.75) {
+        kind = 'brig';
+      } else {
+        kind = 'fireship';
+      }
+    } else if (Math.random() < 0.3) {
       kind = 'merchant';
     } else {
       // the mix gets uglier as your infamy grows: first fire ships, then brigs, then elites
@@ -1811,7 +1962,8 @@ export class GameScene extends Phaser.Scene {
     );
     let alive = 0;
     for (const e of this.enemies.getChildren() as EnemyShip[]) {
-      if (e.active && !e.sinking) alive++;
+      // beaten hulks waiting to be plundered don't count against the spawn cap
+      if (e.active && !e.sinking && !e.surrendered) alive++;
     }
     if (alive < cap) this.spawnEnemy();
   }
@@ -1953,6 +2105,19 @@ export class GameScene extends Phaser.Scene {
         this.player.winchLevel++;
         break;
     }
+  }
+
+  private pauseGame(): void {
+    if (this.overlayOpen) return;
+    this.overlayOpen = true;
+    this.scene.pause();
+    const el = showOverlay(`
+      <div class="panel">
+        <h2>ANCHORED</h2>
+        <p style="text-align:center">The sea waits for no captain — but she'll wait for you.</p>
+        <button class="btn big">RESUME</button>
+      </div>`);
+    el.querySelector('button')!.addEventListener('click', () => this.closeOverlay(el));
   }
 
   private gameOver(): void {

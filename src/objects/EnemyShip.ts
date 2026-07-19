@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { ENEMY, ENCOUNTER } from '../config';
+import { aggroRangeAt, biomeAt } from '../systems/biomes';
 
 export type EnemyKind = 'gunboat' | 'sloop' | 'merchant' | 'manowar' | 'fireship' | 'brig' | 'frigate';
 
@@ -64,11 +65,14 @@ export class EnemyShip extends Phaser.Physics.Arcade.Sprite {
     const toPlayer = Phaser.Math.Angle.Between(this.x, this.y, player.x, player.y);
     const dist = Phaser.Math.Distance.Between(this.x, this.y, player.x, player.y);
 
-    // hostiles only hunt the player when close (hunters never lose the scent)
+    // hostiles only hunt the player when close (hunters never lose the scent;
+    // predators in the fog strike late and close; the golden shallows are safe
+    // waters — unless you're daft enough to fire first)
     if (this.kind !== 'merchant') {
+      const safeWaters = biomeAt(player.x, player.y) === 'shallows';
       if (this.hunter) this.aggroed = true;
       else if (this.aggroed && dist > ENCOUNTER.deaggroRange) this.aggroed = false;
-      else if (!this.aggroed && dist < ENCOUNTER.aggroRange) this.aggroed = true;
+      else if (!this.aggroed && !safeWaters && dist < aggroRangeAt(this.x, this.y)) this.aggroed = true;
     }
 
     let heading: number;

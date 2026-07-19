@@ -153,6 +153,27 @@ export const DAYNIGHT = {
   cycleSeconds: 240, // one full day across the sea
 };
 
+// Biomes: concentric rings of risk around Port Royal, plus scattered fog banks.
+// The further out you sail, the uglier the company — and the fatter the prize.
+export const BIOMES = {
+  shallowsR: 1400, // golden shallows: merchants & sloops only — safe waters
+  stormInnerR: 2800, // storm belt: lightning, swells shove your hull
+  stormOuterR: 4200, // beyond this: the deep
+  deepLootMul: 1.5, // coins collected in the deep pay half again
+  storm: {
+    swellEveryMs: 3600, // a swell shoves every ship in the belt
+    swellForce: 55,
+    lightningMinMs: 6000,
+    lightningMaxMs: 14000,
+  },
+  fog: {
+    count: 3,
+    radius: [320, 520], // per-bank radius range
+    aggroMul: 0.45, // predators in the mist see you late — and strike close
+    lurkers: 2, // hulls lurking in each bank, waiting
+  },
+};
+
 export function killsToNextLevel(level: number): number {
   return 3 + (level - 1) * 2;
 }
