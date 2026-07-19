@@ -19,7 +19,7 @@
 
 ---
 
-## Current state — what's implemented (v0.3, playable)
+## Current state — what's implemented (v0.4, playable)
 
 ### Sailing & world
 - Momentum sailing (W/S sails, A/D rudder), drag, turn rate, foam wake, camera follow with lag
@@ -70,6 +70,20 @@ Every event spawns nearby, announces itself, and drifts away if ignored — all 
 | **Floating coffin** | Pry it open: burial coins, rum, bare bones… or **THE DEAD RESENT YOU** (curse damage) |
 | **Smuggler's cache** | Fat lashed cargo — 50% chance **hidden guards** (2 sloops) spring as you close in |
 | **Following whale** | Shadows your wake ~70s, spouts; may **flush a sunken treasure glint** up for you (40%/spout) |
+
+### Ports of call (4) — different stock, prices, and standards
+| Port | Waters | Faction | Notes |
+|---|---|---|---|
+| **Port Royal** | golden shallows | navy | Full stock + the winch. At **★8 notoriety the harbormaster bars you** — "We know your face, pirate." |
+| **Charles Towne** | open sea | merchant | Posh docks, +15% prices; repairs & hull work only, plus rumors |
+| **Tortuga** | the deep | pirate | Cheap guns (–15%), no questions asked — if you can survive the sail out |
+| **Smuggler's Cove** | storm belt | smuggler | Cheapest (–20%), lean stock, storm-lashed |
+
+- **Tavern rumors** for sale at port: *sunken secrets* (glints charted for 90s) and *a fat prize* (marks a gold-hulled **prize galleon** on your chart — 3× cargo, light escort)
+- Islands, whirlpools and fog banks all keep their distance from every harbor
+
+### Captain's records (localStorage)
+Best purse / kills / notoriety / level, voyage count, lifetime sunk, Men O' War felled — shown on the death and bounty screens. The "one more run" hook.
 
 ### Biomes — the rings of risk
 - **Golden shallows** (within 1400px of Port Royal): warm sunlit water; genuinely safe — nothing turns hostile here unless you fire first, and drifting traffic bumps hulls without bloodshed
@@ -157,8 +171,8 @@ Auto-harpoon that spears sunken treasure and far loot, reels it home with a visi
 - ~~**Music**: procedural shanty layers that build as your build grows~~ **DONE** (adaptive WebAudio shanty)
 
 ### Tier 2 — roguelite structure (the "proper game")
-- **Multiple ports**: navy / merchant / pirate haven / smuggler cove — different stock and prices; some refuse you at high notoriety
-- **Tavern**: rumors that mark treasure/bounties on the map; hire named crew specialists who level up
+- ~~**Multiple ports**: navy / merchant / pirate haven / smuggler cove — different stock and prices; some refuse you at high notoriety~~ **DONE**
+- **Tavern**: ~~rumors that mark treasure/bounties on the map~~ **DONE** (glint reveal + prize galleon); hire named crew specialists who level up (TODO)
 - **Trading**: buy low/sell high between ports, cargo hold capacity — a heavy hold makes you slow *and* hunted
 - **Cursed relics**: powerful items with hooks (raise the **curse** dial — the supernatural notices you)
 - **Three escalation dials**: notoriety (humans), curse (supernatural), depth (distance from safe waters) — player-controlled difficulty
@@ -166,7 +180,7 @@ Auto-harpoon that spears sunken treasure and far loot, reels it home with a visi
 - **Meta progression**: permanent home-port upgrades; achievements unlock new cards into the draft pool forever
 - **Run finale**: kill the legendary bounty, then the Royal Navy armada closes in — survive or die glorious; endless mode after
 - **Challenge modifiers**: permadeath ironman, eternal storm, no-ports, max notoriety start
-- **Save system** (localStorage → Steam Cloud later)
+- ~~**Save system**~~ **DONE** (captain's records in localStorage; full run-save + Steam Cloud still TODO)
 
 ### Tier 3 — the works
 - **The bestiary**: kraken (tentacles as arena hazards, sever 8 to win — heart becomes *Summon the Deep* weapon), megalodon (ambush rammer, teeth for crafting), the Flying Dutchman (ghost boss, only hittable when it fires), sirens (charm your own crew), the Leviathan (endgame, a living island)

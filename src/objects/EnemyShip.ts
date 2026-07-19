@@ -21,6 +21,7 @@ export class EnemyShip extends Phaser.Physics.Arcade.Sprite {
   sinking = false;
   surrendered = false;
   aggroed = false;
+  prize = false; // a fat prize galleon, marked by a tavern rumor — pays triple
 
   private wobble: number;
   private wanderHeading: number;

@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { WORLD, PORT, BOSS, BIOMES } from '../config';
+import { WORLD, PORT, PORTS, BOSS, BIOMES } from '../config';
 import { WEAPONS } from '../systems/weapons';
 import { getEvolution } from '../systems/cards';
 import { getFogBanks } from '../systems/biomes';
@@ -49,7 +49,7 @@ export class UIScene extends Phaser.Scene {
     });
     this.hpBar = this.add.graphics();
     const controls = this.add.text(640, 694,
-      'W/S sails · A/D rudder · broadsides auto-fire · ⚑ strike = board & plunder · E interact · H hide HUD · TAB ledger', {
+      'W/S sails · A/D rudder · broadsides auto-fire · ⚑ strike = board & plunder · E interact · H hide HUD · TAB ledger · ESC anchor', {
       fontFamily: 'Georgia', fontSize: '13px', color: '#7fa6bd',
     }).setOrigin(0.5);
     this.dockHint = this.add.text(640, 636, '', {
@@ -168,8 +168,8 @@ export class UIScene extends Phaser.Scene {
       g.fillCircle(ox + w.x * k, oy + w.y * k, 3);
     }
 
-    // winchman's eye: a Lv2+ winch sniffs out sunken treasure on the chart
-    if (gs.player.winchLevel >= 2) {
+    // winchman's eye — or a tavern rumor — sniffs out sunken treasure on the chart
+    if (gs.player.winchLevel >= 2 || gs.time.now < gs.glintsRevealedUntil) {
       g.fillStyle(0xfff6c8, 0.9);
       for (const gl of gs.glints) {
         g.fillCircle(ox + gl.x * k, oy + gl.y * k, 1.8);
@@ -181,8 +181,12 @@ export class UIScene extends Phaser.Scene {
       g.fillCircle(ox + isl.x * k, oy + isl.y * k, isl.treasure && !isl.plundered ? 3.5 : 2.5);
     }
 
-    g.fillStyle(0xc8a24a, 1);
-    g.fillRect(ox + PORT.x * k - 3, oy + PORT.y * k - 3, 6, 6);
+    // every port of call, in its faction's colors
+    for (const p of PORTS) {
+      const pc = p.faction === 'navy' ? 0xc8a24a : p.faction === 'merchant' ? 0x9fc6de : p.faction === 'pirate' ? 0xd97070 : 0x8ad98a;
+      g.fillStyle(pc, 1);
+      g.fillRect(ox + p.x * k - 3, oy + p.y * k - 3, 6, 6);
+    }
 
     // sea events: moments drifting on the tide
     for (const ev of gs.seaEvents) {
@@ -197,6 +201,7 @@ export class UIScene extends Phaser.Scene {
       if (!e.active || e.sinking) continue;
       const isBoss = e.kind === 'manowar';
       const color = isBoss ? 0xffaa22
+        : e.prize ? 0xffe94a // a fat prize galleon gleams on the chart
         : e.kind === 'merchant' ? 0xd8c9a8
         : e.kind === 'fireship' ? 0xff7a2a
         : e.kind === 'frigate' ? 0xffd97a

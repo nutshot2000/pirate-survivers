@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
-import { WORLD, PLAYER, ENEMY, PORT, ENCOUNTER, ISLANDS, WINCH, FLOTSAM, BOSS, EVOLUTION, FIRESHIP, BRIG, FRIGATE, EVENTS, BIOMES, killsToNextLevel } from '../config';
+import { WORLD, PLAYER, ENEMY, PORT, PORTS, PortDef, RUMOR, ENCOUNTER, ISLANDS, WINCH, FLOTSAM, BOSS, EVOLUTION, FIRESHIP, BRIG, FRIGATE, EVENTS, BIOMES, killsToNextLevel } from '../config';
+import { recordRun } from '../systems/save';
 import { biomeAt, setFogBanks, FogBank } from '../systems/biomes';
 import { generateTextures } from '../textures';
 import { PlayerShip } from '../objects/PlayerShip';
@@ -75,6 +76,8 @@ export class GameScene extends Phaser.Scene {
   overlayOpen = false;
   shopLevels = { damage: 0, rate: 0, hull: 0, speed: 0, accuracy: 0 };
   contextHint = ''; // dock/dig/dredge prompt, rendered by the UI scene
+  glintsRevealedUntil = 0; // tavern rumor: glints on the chart (scene time ms)
+  bossKills = 0; // Men O' War felled this voyage (for the records)
 
   private playerBalls!: Phaser.Physics.Arcade.Group;
   private enemyBalls!: Phaser.Physics.Arcade.Group;
@@ -133,6 +136,9 @@ export class GameScene extends Phaser.Scene {
     this.contextHint = '';
     this.fogPuffs = []; // images were destroyed with the last run — drop the dead refs
     this.nextBossAt = BOSS.notorietyRequired;
+    this.glintsRevealedUntil = 0;
+    this.bossKills = 0;
+    this.runTallied = false;
 
     this.physics.world.setBounds(0, 0, WORLD.width, WORLD.height);
     this.cameras.main.setBounds(0, 0, WORLD.width, WORLD.height);
@@ -151,14 +157,16 @@ export class GameScene extends Phaser.Scene {
     this.add.image(0, 0, 'zones').setOrigin(0).setDepth(-5).setDisplaySize(WORLD.width, WORLD.height)
       .setBlendMode(Phaser.BlendModes.MULTIPLY); // grade, don't wash: keeps the water detail
 
-    // the port
-    this.add.image(PORT.x, PORT.y, 'port').setDepth(1);
-    this.add.text(PORT.x, PORT.y - 100, 'PORT ROYAL', {
-      fontFamily: 'Georgia', fontSize: '16px', color: '#ffd97a',
-    }).setOrigin(0.5).setDepth(2);
-    const ring = this.add.graphics().setDepth(1);
-    ring.lineStyle(2, 0xc8a24a, 0.35);
-    ring.strokeCircle(PORT.x, PORT.y, PORT.dockRadius);
+    // the ports of call — each faction flies its own colors
+    for (const port of PORTS) {
+      this.add.image(port.x, port.y, 'port').setDepth(1).setTint(port.tint);
+      this.add.text(port.x, port.y - 100, port.name, {
+        fontFamily: 'Georgia', fontSize: '16px', color: '#ffd97a',
+      }).setOrigin(0.5).setDepth(2);
+      const ring = this.add.graphics().setDepth(1);
+      ring.lineStyle(2, 0xc8a24a, 0.35);
+      ring.strokeCircle(port.x, port.y, PORT.dockRadius);
+    }
 
     // the player
     this.player = new PlayerShip(this, WORLD.width / 2, 2500);
@@ -240,8 +248,9 @@ export class GameScene extends Phaser.Scene {
 
     this.input.keyboard!.on('keydown-E', () => {
       if (this.overlayOpen) return;
-      if (this.nearPort()) {
-        this.openShop();
+      const port = this.nearPort();
+      if (port) {
+        this.openShop(port);
         return;
       }
       const t = this.nearTreasure();
@@ -453,10 +462,11 @@ export class GameScene extends Phaser.Scene {
     }
 
     // context hint: dock, dig, event, or dredge (rendered by the UI scene)
+    const port = this.nearPort();
     const treasure = this.nearTreasure();
     const ev = this.nearEvent();
-    if (this.nearPort()) {
-      this.contextHint = 'Press E to dock';
+    if (port) {
+      this.contextHint = `Press E to dock — ${port.name}`;
     } else if (treasure) {
       this.contextHint = 'Press E to dig for treasure';
     } else if (ev) {
@@ -477,7 +487,7 @@ export class GameScene extends Phaser.Scene {
 
   private placeIslands(): void {
     const taken: { x: number; y: number }[] = [
-      { x: PORT.x, y: PORT.y },
+      ...PORTS.map((p) => ({ x: p.x, y: p.y })), // every port gets its sea room
       { x: WORLD.width / 2, y: 2500 }, // player spawn
     ];
 
@@ -572,6 +582,7 @@ export class GameScene extends Phaser.Scene {
       const y = Phaser.Math.Between(600, WORLD.height - 600);
       const r = Phaser.Math.Between(BIOMES.fog.radius[0], BIOMES.fog.radius[1]);
       if (Phaser.Math.Distance.Between(x, y, PORT.x, PORT.y) < BIOMES.shallowsR + 500) continue;
+      if (!PORTS.every((p) => Phaser.Math.Distance.Between(x, y, p.x, p.y) > r + 700)) continue; // mist never swallows a harbor
       if (!this.islands.every((isl) => Phaser.Math.Distance.Between(x, y, isl.x, isl.y) > r * 0.6 + isl.r)) continue;
       if (!banks.every((b) => Phaser.Math.Distance.Between(x, y, b.x, b.y) > r + b.r + 400)) continue;
       banks.push({ x, y, r });
@@ -1041,7 +1052,7 @@ export class GameScene extends Phaser.Scene {
       attempts++;
       const x = Phaser.Math.Between(400, WORLD.width - 400);
       const y = Phaser.Math.Between(400, WORLD.height - 400);
-      if (Phaser.Math.Distance.Between(x, y, PORT.x, PORT.y) < 900) continue;
+      if (!PORTS.every((p) => Phaser.Math.Distance.Between(x, y, p.x, p.y) > 900)) continue;
       if (Phaser.Math.Distance.Between(x, y, WORLD.width / 2, 2500) < 900) continue;
       if (!this.islands.every((i) => Phaser.Math.Distance.Between(x, y, i.x, i.y) > 500)) continue;
       if (!this.whirlpools.every((w) => Phaser.Math.Distance.Between(x, y, w.x, w.y) > 900)) continue;
@@ -1562,7 +1573,7 @@ export class GameScene extends Phaser.Scene {
   private boardShip(e: EnemyShip): void {
     // grapple alongside and strip her bare — better pay than sinking
     const cfg = ENEMY[e.kind];
-    const total = Math.round(Phaser.Math.Between(cfg.coins[0], cfg.coins[1]) * 1.4); // boarding pays better than sinking
+    const total = Math.round(Phaser.Math.Between(cfg.coins[0], cfg.coins[1]) * 1.4 * (e.prize ? RUMOR.prizeLootMul : 1));
     for (let i = 0; i < 5; i++) {
       this.spawnLoot(e.x + Phaser.Math.Between(-24, 24), e.y + Phaser.Math.Between(-24, 24), 'coins', Math.max(2, Math.round(total / 5)));
     }
@@ -1668,9 +1679,9 @@ export class GameScene extends Phaser.Scene {
     // a fire ship doesn't sink so much as detonate
     if (e.kind === 'fireship') this.explodeFireship(e.x, e.y);
 
-    // spill the cargo — every hull has its own manifest
+    // spill the cargo — every hull has its own manifest; a prize galleon overflows
     const cfg = ENEMY[e.kind];
-    const total = Phaser.Math.Between(cfg.coins[0], cfg.coins[1]);
+    const total = Phaser.Math.Between(cfg.coins[0], cfg.coins[1]) * (e.prize ? RUMOR.prizeLootMul : 1);
     const n = Phaser.Math.Between(3, 5);
     for (let i = 0; i < n; i++) {
       this.spawnLoot(
@@ -1742,6 +1753,7 @@ export class GameScene extends Phaser.Scene {
     if (e.kind === 'manowar') {
       this.player.notoriety += 5;
       this.boss = null;
+      this.bossKills++;
       this.nextBossAt = this.player.notoriety + 5; // the navy never forgives — another will come
       this.time.delayedCall(1600, () => this.victory());
     }
@@ -1865,6 +1877,23 @@ export class GameScene extends Phaser.Scene {
     if (launched > 0) this.floatText(b.x, b.y - 44, 'ESCORTS LAUNCHED', '#ffaa22', 13);
   }
 
+  private runTallied = false; // a voyage tallies its lifetime stats once
+
+  private recordsHtml(): string {
+    const r = recordRun({
+      coins: this.player.coins,
+      kills: this.player.kills,
+      notoriety: this.player.notoriety,
+      level: this.player.level,
+      bosses: this.bossKills,
+    }, !this.runTallied);
+    this.runTallied = true;
+    return `<p style="text-align:center;font-size:12px;color:#9db8cc">
+      best purse ${r.bestCoins}g &middot; best kills ${r.bestKills} &middot; most infamous ★${r.bestNotoriety}<br/>
+      voyage #${r.runs} &middot; ${r.totalSunk} ships sunk all-time &middot; ${r.bossesFelled} Men O' War felled
+    </p>`;
+  }
+
   private victory(): void {
     if (this.overlayOpen) return;
     this.overlayOpen = true;
@@ -1875,6 +1904,7 @@ export class GameScene extends Phaser.Scene {
         <h2>LEGENDARY BOUNTY CLAIMED</h2>
         <p style="text-align:center">${BOSS.name} rests on the ocean floor.</p>
         <p style="text-align:center">${this.player.kills} ships sunk &middot; ${this.player.coins}g plundered &middot; ★${this.player.notoriety} &middot; Lv ${this.player.level}</p>
+        ${this.recordsHtml()}
         <button class="btn big" data-k="sail">KEEP SAILING — endless mode</button>
         <button class="btn big" data-k="new">NEW VOYAGE</button>
       </div>`);
@@ -1970,8 +2000,13 @@ export class GameScene extends Phaser.Scene {
 
   // ---------- port / shop / draft ----------
 
-  nearPort(): boolean {
-    return Phaser.Math.Distance.Between(this.player.x, this.player.y, PORT.x, PORT.y) < PORT.dockRadius;
+  nearPort(): PortDef | null {
+    for (const port of PORTS) {
+      if (Phaser.Math.Distance.Between(this.player.x, this.player.y, port.x, port.y) < PORT.dockRadius) {
+        return port;
+      }
+    }
+    return null;
   }
 
   private openDraft(): void {
@@ -2018,21 +2053,36 @@ export class GameScene extends Phaser.Scene {
     });
   }
 
-  private openShop(): void {
+  private openShop(port: PortDef): void {
     this.overlayOpen = true;
     this.scene.pause();
+
+    // the harbormaster has standards — a wanted pirate gets no dock here
+    if (this.player.notoriety >= port.refusesAt) {
+      const el = showOverlay(`
+        <div class="panel">
+          <h2>${port.name}</h2>
+          <p style="text-align:center">The harbormaster spits over the rail. <em>"We know your face, pirate. No dock for you here."</em></p>
+          <p style="text-align:center;color:#9db8cc">Word is, Tortuga asks no questions… if you can reach her.</p>
+          <button class="btn big">SET SAIL</button>
+        </div>`);
+      el.querySelector('button')!.addEventListener('click', () => this.closeOverlay(el));
+      return;
+    }
+
     const el = showOverlay('');
 
     const render = (): void => {
       const p = this.player;
       const L = this.shopLevels;
-      const rows = [
-        { key: 'repair', name: 'Shipwright: patch hull (+40 HP)', cost: 20, can: p.hp < p.maxHp },
-        { key: 'damage', name: `Cannons: +10% damage (Lv ${L.damage})`, cost: 40 * (L.damage + 1), can: true },
-        { key: 'rate', name: `Gun crews: +8% fire rate (Lv ${L.rate})`, cost: 40 * (L.rate + 1), can: true },
-        { key: 'hull', name: `Hull plating: +20 max HP (Lv ${L.hull})`, cost: 30 * (L.hull + 1), can: true },
-        { key: 'speed', name: `New sails: +6% speed (Lv ${L.speed})`, cost: 35 * (L.speed + 1), can: true },
-        { key: 'accuracy', name: `Gunnery school: +12% accuracy (Lv ${L.accuracy})`, cost: 35 * (L.accuracy + 1), can: true },
+      const price = (base: number): number => Math.max(1, Math.round(base * port.priceMul));
+      const allRows: { key: string; name: string; cost: number; can: boolean }[] = [
+        { key: 'repair', name: 'Shipwright: patch hull (+40 HP)', cost: price(20), can: p.hp < p.maxHp },
+        { key: 'damage', name: `Cannons: +10% damage (Lv ${L.damage})`, cost: price(40 * (L.damage + 1)), can: true },
+        { key: 'rate', name: `Gun crews: +8% fire rate (Lv ${L.rate})`, cost: price(40 * (L.rate + 1)), can: true },
+        { key: 'hull', name: `Hull plating: +20 max HP (Lv ${L.hull})`, cost: price(30 * (L.hull + 1)), can: true },
+        { key: 'speed', name: `New sails: +6% speed (Lv ${L.speed})`, cost: price(35 * (L.speed + 1)), can: true },
+        { key: 'accuracy', name: `Gunnery school: +12% accuracy (Lv ${L.accuracy})`, cost: price(35 * (L.accuracy + 1)), can: true },
         {
           key: 'winch',
           name: p.winchLevel >= 3
@@ -2040,13 +2090,26 @@ export class GameScene extends Phaser.Scene {
             : p.winchLevel === 0
               ? 'Salvage winch: harpoon loot & sunken treasure'
               : `Winch Lv ${p.winchLevel + 1}: longer reach, faster reel`,
-          cost: p.winchLevel >= 3 ? -1 : WINCH.costs[p.winchLevel],
+          cost: p.winchLevel >= 3 ? -1 : price(WINCH.costs[p.winchLevel]),
           can: p.winchLevel < 3,
         },
+        {
+          key: 'rumor-glint',
+          name: 'Tavern rumor: sunken secrets — glints charted for 90s',
+          cost: price(RUMOR.glintCost),
+          can: this.time.now >= this.glintsRevealedUntil,
+        },
+        {
+          key: 'rumor-prize',
+          name: "Tavern rumor: a fat prize galleon — she's marked on your chart",
+          cost: price(RUMOR.prizeCost),
+          can: true,
+        },
       ];
+      const rows = allRows.filter((r) => port.stock.includes(r.key as never));
       el.innerHTML = `
         <div class="panel">
-          <h2>PORT ROYAL</h2>
+          <h2>${port.name}</h2>
           <div class="shop-row"><span>Your purse</span><span class="coins">${p.coins}g</span></div>
           ${rows.map((r) => `
             <div class="shop-row">
@@ -2104,7 +2167,28 @@ export class GameScene extends Phaser.Scene {
       case 'winch':
         this.player.winchLevel++;
         break;
+      case 'rumor-glint':
+        // the tavern's best ears point you at the glitter
+        this.glintsRevealedUntil = this.time.now + RUMOR.glintRevealMs;
+        this.floatText(this.player.x, this.player.y - 44, 'SUNKEN GLINTS CHARTED', '#ffd97a', 16);
+        break;
+      case 'rumor-prize':
+        this.spawnPrizeGalleon();
+        break;
     }
+  }
+
+  // a fat, gold-hulled merchant wallowing under easy escort — rumor made flesh
+  private spawnPrizeGalleon(): void {
+    const { x, y } = this.eventSpot(900, 1400);
+    const g = new EnemyShip(this, x, y, 'merchant');
+    g.prize = true;
+    g.setTint(0xffd97a);
+    g.setScale(1.15); // heavy with cargo
+    this.enemies.add(g);
+    const escort = new EnemyShip(this, x + 90, y + 60, 'gunboat');
+    this.enemies.add(escort);
+    this.floatText(this.player.x, this.player.y - 52, 'A FAT PRIZE SAILS NEARBY — CHECK YOUR CHART', '#ffd97a', 15);
   }
 
   private pauseGame(): void {
@@ -2129,6 +2213,7 @@ export class GameScene extends Phaser.Scene {
       <div class="panel">
         <h2>SHE'S GOING DOWN</h2>
         <p style="text-align:center">${this.player.kills} ships sunk &middot; ${this.player.coins}g in the hold</p>
+        ${this.recordsHtml()}
         <button class="btn big">SAIL AGAIN</button>
       </div>`);
     el.querySelector('button')!.addEventListener('click', () => {

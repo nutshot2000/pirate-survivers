@@ -57,10 +57,61 @@ export const BOSS = {
   name: 'HMS INEXORABLE',
 };
 
+// Ports of call. Each has its own stock, prices, and standards — the navy
+// won't dock a known pirate, and pirates don't ask questions.
+export type ShopItem = 'repair' | 'damage' | 'rate' | 'hull' | 'speed' | 'accuracy' | 'winch' | 'rumor-glint' | 'rumor-prize';
+
+export interface PortDef {
+  id: string;
+  name: string;
+  x: number;
+  y: number;
+  faction: 'navy' | 'merchant' | 'pirate' | 'smuggler';
+  tint: number;
+  priceMul: number;
+  stock: ShopItem[];
+  refusesAt: number; // notoriety at which the harbormaster bars you (99 = never)
+}
+
+export const PORTS: PortDef[] = [
+  {
+    id: 'royal', name: 'PORT ROYAL', x: 3000, y: 1400,
+    faction: 'navy', tint: 0xffffff, priceMul: 1,
+    stock: ['repair', 'damage', 'rate', 'hull', 'speed', 'accuracy', 'winch', 'rumor-glint', 'rumor-prize'],
+    refusesAt: 8, // at ★8 the navy knows your face
+  },
+  {
+    id: 'charles', name: 'CHARLES TOWNE', x: 1350, y: 3150,
+    faction: 'merchant', tint: 0xbfd9ea, priceMul: 1.15, // posh docks, posh prices
+    stock: ['repair', 'hull', 'speed', 'rumor-glint'],
+    refusesAt: 99,
+  },
+  {
+    id: 'tortuga', name: 'TORTUGA', x: 5200, y: 5200, // deep water — the pirate haven is earned
+    faction: 'pirate', tint: 0xd98a8a, priceMul: 0.85,
+    stock: ['repair', 'damage', 'rate', 'accuracy', 'rumor-prize'],
+    refusesAt: 99,
+  },
+  {
+    id: 'cove', name: "SMUGGLER'S COVE", x: 850, y: 4250, // storm-lashed and cheap
+    faction: 'smuggler', tint: 0x9ad9a0, priceMul: 0.8,
+    stock: ['repair', 'damage', 'speed', 'rumor-glint', 'rumor-prize'],
+    refusesAt: 99,
+  },
+];
+
+// Port Royal anchors the biome rings (shallows/storm/deep are measured from it)
 export const PORT = {
-  x: WORLD.width / 2,
-  y: 1400,
+  x: PORTS[0].x,
+  y: PORTS[0].y,
   dockRadius: 220,
+};
+
+export const RUMOR = {
+  glintCost: 25, // tavern talk of sunken treasure: glints charted for a while
+  glintRevealMs: 90000,
+  prizeCost: 40, // word of a fat prize galleon — marked on your chart
+  prizeLootMul: 3,
 };
 
 export const ENCOUNTER = {
