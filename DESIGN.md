@@ -19,7 +19,7 @@
 
 ---
 
-## Current state — what's implemented (v0.4, playable)
+## Current state — what's implemented (v0.5, playable)
 
 ### Sailing & world
 - Momentum sailing (W/S sails, A/D rudder), drag, turn rate, foam wake, camera follow with lag
@@ -80,6 +80,9 @@ Every event spawns nearby, announces itself, and drifts away if ignored — all 
 | **Smuggler's Cove** | storm belt | smuggler | Cheapest (–20%), lean stock, storm-lashed |
 
 - **Tavern rumors** for sale at port: *sunken secrets* (glints charted for 90s) and *a fat prize* (marks a gold-hulled **prize galleon** on your chart — 3× cargo, light escort)
+- **The trade counter**: every port buys and sells **Rum, Silk and Spice** — prices are fixed per port, so profit lives in the sailing between them (Tortuga rum → Charles Towne, Cove spice → Port Royal)
+- **Hold of 12 crates**; every crate trims ~1.5% off your top speed, and carrying 6+ puts word on the wind — **hunters spawn for your cargo at any notoriety**
+- Cargo shows in the HUD (`Hold 7/12⚠`), the ledger, and the shop counter
 - Islands, whirlpools and fog banks all keep their distance from every harbor
 
 ### Captain's records (localStorage)
@@ -173,7 +176,7 @@ Auto-harpoon that spears sunken treasure and far loot, reels it home with a visi
 ### Tier 2 — roguelite structure (the "proper game")
 - ~~**Multiple ports**: navy / merchant / pirate haven / smuggler cove — different stock and prices; some refuse you at high notoriety~~ **DONE**
 - **Tavern**: ~~rumors that mark treasure/bounties on the map~~ **DONE** (glint reveal + prize galleon); hire named crew specialists who level up (TODO)
-- **Trading**: buy low/sell high between ports, cargo hold capacity — a heavy hold makes you slow *and* hunted
+- ~~**Trading**: buy low/sell high between ports, cargo hold capacity — a heavy hold makes you slow *and* hunted~~ **DONE** (3 goods, fixed per-port prices, 12-crate hold, cargo slow + hunter heat)
 - **Cursed relics**: powerful items with hooks (raise the **curse** dial — the supernatural notices you)
 - **Three escalation dials**: notoriety (humans), curse (supernatural), depth (distance from safe waters) — player-controlled difficulty
 - **Captains & hulls**: unlockable starting characters/ships (smuggler: fast + big hold; ex-navy: military cannons, wanted from the start)

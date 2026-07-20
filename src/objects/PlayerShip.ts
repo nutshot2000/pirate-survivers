@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { PLAYER } from '../config';
+import { PLAYER, TRADE } from '../config';
 import { PlayerMods, baseMods } from '../systems/cards';
 import { WeaponId } from '../systems/weapons';
 
@@ -17,6 +17,13 @@ export class PlayerShip extends Phaser.Physics.Arcade.Sprite {
   powderUntil = 0; // fire-rate buff expiry (scene time ms)
   whirlReadyAt = 0; // whirlpool damage tick cooldown
   winchLevel = 0; // salvage winch tier (0 = no winch)
+  cargo: Record<string, number> = {}; // trade goods in the hold (good id → crates)
+
+  cargoCount(): number {
+    let n = 0;
+    for (const k in this.cargo) n += this.cargo[k];
+    return n;
+  }
 
   private keys: Record<string, Phaser.Input.Keyboard.Key>;
 
@@ -59,7 +66,9 @@ export class PlayerShip extends Phaser.Physics.Arcade.Sprite {
       body.setAcceleration(0, 0);
     }
 
-    const max = PLAYER.maxSpeed * this.mods.speedMul;
+    // a heavy hold is a slow hold — cargo trims your top speed
+    const cargoSlow = Math.max(0.7, 1 - TRADE.slowPerCrate * this.cargoCount());
+    const max = PLAYER.maxSpeed * this.mods.speedMul * cargoSlow;
     if (body.velocity.length() > max) {
       body.velocity.setLength(max);
     }

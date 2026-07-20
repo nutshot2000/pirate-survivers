@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { WORLD, PORT, PORTS, BOSS, BIOMES } from '../config';
+import { WORLD, PORT, PORTS, BOSS, BIOMES, TRADE } from '../config';
 import { WEAPONS } from '../systems/weapons';
 import { getEvolution } from '../systems/cards';
 import { getFogBanks } from '../systems/biomes';
@@ -109,7 +109,9 @@ export class UIScene extends Phaser.Scene {
     this.coinText.setText(`${p.coins}g`);
     const stars = p.notoriety > 0 ? '  ' + '★'.repeat(Math.min(p.notoriety, 10)) : '';
     const powder = p.powderUntil > time ? ` · ⚡${Math.ceil((p.powderUntil - time) / 1000)}s` : '';
-    this.hudText.setText(`Lv ${p.level} · Kills ${p.kills}${stars}${powder}`);
+    const hold = p.cargoCount();
+    const cargo = hold > 0 ? ` · Hold ${hold}/${TRADE.capacity}${hold >= TRADE.huntedAt ? '⚠' : ''}` : '';
+    this.hudText.setText(`Lv ${p.level} · Kills ${p.kills}${stars}${powder}${cargo}`);
 
     // weapon loadout — evolved weapons fly their true colors
     const parts: string[] = [];
@@ -274,6 +276,15 @@ export class UIScene extends Phaser.Scene {
     if (m.maxHpBonus > 0) refits.push(row('Hull bonus', `+${m.maxHpBonus} max HP`));
     if (m.chainShot) refits.push(row('Chain shot', 'hits slow ships'));
     if (p.winchLevel > 0) refits.push(row('Salvage winch', `Lv ${p.winchLevel}`));
+    const hold = p.cargoCount();
+    if (hold > 0) {
+      const manifest = Object.entries(TRADE.goods)
+        .filter(([gid]) => (p.cargo[gid] ?? 0) > 0)
+        .map(([gid, g]) => `${g.name} ×${p.cargo[gid]}`)
+        .join(' · ');
+      refits.push(row(`Cargo hold (${hold}/${TRADE.capacity})`, manifest));
+      if (hold >= TRADE.huntedAt) refits.push(row('⚠', 'the hold is fat — hunters smell profit'));
+    }
     if (L.damage + L.rate + L.hull + L.speed + L.accuracy > 0) {
       refits.push(row('Port refits', `DMG${L.damage} · ROF${L.rate} · HULL${L.hull} · SAIL${L.speed} · ACC${L.accuracy}`));
     }

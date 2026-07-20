@@ -114,6 +114,29 @@ export const RUMOR = {
   prizeLootMul: 3,
 };
 
+// Trading: buy low here, sell high there. Prices are [buy, sell] per port —
+// profit lives in the sailing between them. A fat hold slows you, and word
+// of your cargo puts hunters on the wind.
+export const TRADE = {
+  capacity: 12, // crates in the hold
+  slowPerCrate: 0.015, // each crate trims ~1.5% off your top speed
+  huntedAt: 6, // this many crates and the sea knows you're worth robbing
+  goods: {
+    rum: {
+      name: 'Rum',
+      prices: { royal: [14, 9], charles: [16, 11], tortuga: [8, 5], cove: [12, 8] },
+    },
+    silk: {
+      name: 'Silk',
+      prices: { royal: [22, 15], charles: [12, 8], tortuga: [20, 13], cove: [18, 12] },
+    },
+    spice: {
+      name: 'Spice',
+      prices: { royal: [26, 18], charles: [24, 16], tortuga: [22, 15], cove: [14, 9] },
+    },
+  } as Record<string, { name: string; prices: Record<string, [number, number]> }>,
+};
+
 export const ENCOUNTER = {
   aggroRange: 700, // enemies notice you inside this
   deaggroRange: 1050, // and give up outside this

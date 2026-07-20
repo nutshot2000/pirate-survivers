@@ -1,5 +1,5 @@
 import Phaser from 'phaser';
-import { WORLD, PLAYER, ENEMY, PORT, PORTS, PortDef, RUMOR, ENCOUNTER, ISLANDS, WINCH, FLOTSAM, BOSS, EVOLUTION, FIRESHIP, BRIG, FRIGATE, EVENTS, BIOMES, killsToNextLevel } from '../config';
+import { WORLD, PLAYER, ENEMY, PORT, PORTS, PortDef, RUMOR, TRADE, ENCOUNTER, ISLANDS, WINCH, FLOTSAM, BOSS, EVOLUTION, FIRESHIP, BRIG, FRIGATE, EVENTS, BIOMES, killsToNextLevel } from '../config';
 import { recordRun } from '../systems/save';
 import { biomeAt, setFogBanks, FogBank } from '../systems/biomes';
 import { generateTextures } from '../textures';
@@ -1973,8 +1973,10 @@ export class GameScene extends Phaser.Scene {
       else {
         const gunboatChance = Math.min(0.35 + n * 0.05, 0.75);
         kind = Math.random() < gunboatChance ? 'gunboat' : 'sloop';
-        // at notoriety 3+, some navy ships spawn already hunting you
-        if (kind === 'gunboat' && n >= 3 && Math.random() < 0.4) hunter = true;
+        // at notoriety 3+ some navy ships spawn already hunting you —
+        // and a fat hold puts word on the wind at any infamy
+        const fatHold = this.totalCargo() >= TRADE.huntedAt;
+        if (kind === 'gunboat' && Math.random() < (n >= 3 ? 0.4 : 0) + (fatHold ? 0.35 : 0)) hunter = true;
       }
     }
     const e = new EnemyShip(this, x, y, kind, hunter);
@@ -2107,6 +2109,21 @@ export class GameScene extends Phaser.Scene {
         },
       ];
       const rows = allRows.filter((r) => port.stock.includes(r.key as never));
+
+      // the trade counter: every port buys and sells every good — profit is in the sailing
+      const hold = p.cargoCount();
+      const tradeRows = Object.entries(TRADE.goods).map(([gid, g]) => {
+        const [buy, sell] = g.prices[port.id];
+        const held = p.cargo[gid] ?? 0;
+        return `<div class="shop-row">
+          <span>${g.name} <span style="color:#7fa6bd">× ${held}</span></span>
+          <span style="display:flex;gap:8px">
+            <button class="btn" data-key="buy:${gid}" ${p.coins < buy || hold >= TRADE.capacity ? 'disabled' : ''}>BUY ${buy}g</button>
+            <button class="btn" data-key="sell:${gid}" ${held <= 0 ? 'disabled' : ''}>SELL ${sell}g</button>
+          </span>
+        </div>`;
+      }).join('');
+
       el.innerHTML = `
         <div class="panel">
           <h2>${port.name}</h2>
@@ -2116,6 +2133,8 @@ export class GameScene extends Phaser.Scene {
               <span>${r.name}</span>
               <button class="btn" data-key="${r.key}" ${!r.can || p.coins < r.cost ? 'disabled' : ''}>${r.cost < 0 ? 'MAX' : r.cost + 'g'}</button>
             </div>`).join('')}
+          <div class="shop-row" style="border-bottom:none;padding-bottom:0"><span style="color:#c8a24a;font-size:11px;letter-spacing:2px">THE TRADE COUNTER — HOLD ${hold}/${TRADE.capacity}${hold >= TRADE.huntedAt ? ' ⚠ fat hold, they know' : ''}</span></div>
+          ${tradeRows}
           <button class="btn big" data-key="leave">SET SAIL</button>
         </div>`;
       el.querySelectorAll('button').forEach((btn) => {
@@ -2123,6 +2142,11 @@ export class GameScene extends Phaser.Scene {
           const key = (btn as HTMLElement).getAttribute('data-key')!;
           if (key === 'leave') {
             this.closeOverlay(el);
+            return;
+          }
+          if (key.startsWith('buy:') || key.startsWith('sell:')) {
+            this.tradeGood(port, key);
+            render();
             return;
           }
           const row = rows.find((r) => r.key === key)!;
@@ -2176,6 +2200,29 @@ export class GameScene extends Phaser.Scene {
         this.spawnPrizeGalleon();
         break;
     }
+  }
+
+  // buy or sell one crate at the trade counter
+  private tradeGood(port: PortDef, key: string): void {
+    const [verb, gid] = key.split(':');
+    const g = TRADE.goods[gid];
+    if (!g) return;
+    const [buy, sell] = g.prices[port.id];
+    const p = this.player;
+    if (verb === 'buy') {
+      if (p.coins < buy || p.cargoCount() >= TRADE.capacity) return;
+      p.coins -= buy;
+      p.cargo[gid] = (p.cargo[gid] ?? 0) + 1;
+    } else {
+      if ((p.cargo[gid] ?? 0) <= 0) return;
+      p.cargo[gid] -= 1;
+      p.coins += sell;
+    }
+    sfx.coin();
+  }
+
+  private totalCargo(): number {
+    return this.player.cargoCount();
   }
 
   // a fat, gold-hulled merchant wallowing under easy escort — rumor made flesh
